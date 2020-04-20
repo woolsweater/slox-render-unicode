@@ -28,14 +28,39 @@ struct UTF8Buffer {
     let contents: UInt32
 }
 
+extension UTF8Buffer {
+    static let empty = UTF8Buffer(contents: 0)
+
+    init(_ codepoint: UInt32) {
+        if codepoint < 0x80 {
+            self.contents = utf8LeadingByte(codepoint, sequenceCount: 1)
+        } else if codepoint < 0x800 {
+            self.contents =
+                utf8LeadingByte(codepoint >> 6, sequenceCount: 2) |
+                (utf8TrailingByte(codepoint) << 8)
+        } else if codepoint < 0x1_0000 {
+            self.contents =
+                utf8LeadingByte(codepoint >> 12, sequenceCount: 3) |
+                (utf8TrailingByte(codepoint >> 6) << 8) |
+                (utf8TrailingByte(codepoint) << 16)
+        } else {
+            self.contents =
+                utf8LeadingByte(codepoint >> 18, sequenceCount: 4) |
+                (utf8TrailingByte(codepoint >> 12) << 8) |
+                (utf8TrailingByte(codepoint >> 6) << 16) |
+                (utf8TrailingByte(codepoint) << 24)
+        }
+    }
+}
+
 extension UTF8Buffer : Sequence {
     struct Iterator : IteratorProtocol {
         fileprivate var contents: UInt32
 
-        mutating func next() -> UInt8? {
+        mutating func next() -> CChar? {
             guard self.contents > 0 else { return nil }
             defer { self.contents >>= 8 }
-            return UInt8(exactly: self.contents & 0b1111)!
+            return CChar(bitPattern: UInt8(self.contents & 0xFF))
         }
     }
 
@@ -45,76 +70,40 @@ extension UTF8Buffer : Sequence {
 }
 
 @inline(__always)
-func utf8LeadingByte(_ value: UInt32, sequenceCount: Int) -> CChar {
-
-    let masked: UInt8
+func utf8LeadingByte(_ value: UInt32, sequenceCount: Int) -> UInt32 {
     switch sequenceCount {
         case 1:
-            masked = UInt8(value)
+            return value
         case 2:
-            masked = UInt8((value & 0b1_1111) | 0b1100_0000)
+            return (value & 0b1_1111) | 0b1100_0000
         case 3:
-            masked = UInt8((value & 0b1111) | 0b1110_0000)
+            return (value & 0b1111) | 0b1110_0000
         case 4:
-            masked = UInt8((value & 0b0111) | 0b1111_000)
+            return (value & 0b0111) | 0b1111_000
         default:
             fatalError("Illegal byte count")
     }
-
-    return CChar(bitPattern: masked)
 }
 
 @inline(__always)
-func utf8TrailingByte(_ value: UInt32) -> CChar {
-    CChar(bitPattern: UInt8((value & 0b11_1111) | 0b1000_0000))
+func utf8TrailingByte(_ value: UInt32) -> UInt32 {
+    (value & 0b11_1111) | 0b1000_0000
 }
 
-func asciiHexToUTF8<Chars : Collection>(_ chars: Chars) -> (Int, [CChar])
+@inline(__always)
+func asciiHexToUTF8<Chars : Collection>(_ chars: Chars) -> (Int, UTF8Buffer)
     where Chars.Element == CChar
 {
-    var point: UInt32 = 0
+    var codepoint: UInt32 = 0
     var consumedCount = 0
     for (i, char) in chars.enumerated() {
         guard let value = char.asciiHexDigitValue else { break }
         consumedCount = i + 1
-        point <<= 4
-        point += UInt32(value)
+        codepoint <<= 4
+        codepoint += UInt32(value)
     }
 
-    guard point > 0 else {
-        return (0, [])
-    }
-
-    if point < 0x80 {
-        return (consumedCount, [utf8LeadingByte(point, sequenceCount: 1)])
-    } else if point < 0x0800 {
-        return (
-            consumedCount,
-            [
-                utf8LeadingByte(point >> 6, sequenceCount: 2),
-                utf8TrailingByte(point >> 0),
-            ]
-        )
-    } else if point < 0x010000 {
-        return (
-            consumedCount,
-            [
-                utf8LeadingByte(point >> 12, sequenceCount: 3),
-                utf8TrailingByte(point >> 6),
-                utf8TrailingByte(point >> 0),
-            ]
-        )
-    } else {
-        return (
-            consumedCount,
-            [
-                utf8LeadingByte(point >> 18, sequenceCount: 4),
-                utf8TrailingByte(point >> 12),
-                utf8TrailingByte(point >> 6),
-                utf8TrailingByte(point >> 0),
-            ]
-        )
-    }
+    return (consumedCount, UTF8Buffer(codepoint))
 }
 
 func renderEscapes(in s: String) -> String {
