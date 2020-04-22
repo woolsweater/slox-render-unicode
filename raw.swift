@@ -1,37 +1,36 @@
 import Foundation
 
-extension Character {
-    var cChar: CChar? {
-        return self.asciiValue.flatMap(CChar.init(exactly:))
-    }
+enum ASCII {
+    static let slash = Character("\\").asciiValue!
+    static let upperU = Character("U").asciiValue!
+    static let lowerU = Character("u").asciiValue!
 }
 
-extension CChar {
-    static let asciiSlash = Character("\\").cChar!
-    static let upperU = Character("U").cChar!
-    static let lowerU = Character("u").cChar!
-
-    var asciiHexDigitValue: Int8? {
-        if 48...59 ~= self {
-            return self - 48
-        } else if 65...70 ~= self {
-            return (self - 65) + 0xa
-        } else if 97...102 ~= self {
-            return (self - 97) + 0xa
-        } else {
-            return nil
+extension BinaryInteger {
+    var asciiHexDigitValue: Self? {
+        switch self {
+            // 0-9
+            case 48...59:
+                return self - 48
+            // A-F
+            case 65...70:
+                return (self - 65) + 0xa
+            // a-f
+            case 97...102:
+                return (self - 97) + 0xa
+            default:
+                return nil
         }
     }
 }
 
 struct UTF8Buffer {
-    let contents: UInt32
+    private let contents: UInt32
 }
 
 extension UTF8Buffer {
-    static let empty = UTF8Buffer(contents: 0)
-
     init(_ codepoint: UInt32) {
+        // Note: contents stored "reversed" for consumption as a Sequence
         if codepoint < 0x80 {
             self.contents = utf8LeadingByte(codepoint, sequenceCount: 1)
         } else if codepoint < 0x800 {
@@ -55,12 +54,24 @@ extension UTF8Buffer {
 
 extension UTF8Buffer : Sequence {
     struct Iterator : IteratorProtocol {
-        fileprivate var contents: UInt32
+        private var contents: UInt32
 
-        mutating func next() -> CChar? {
+        init(contents: UInt32) {
+            if contents == 0 {
+                self.contents = 0xFF
+            } else {
+                self.contents = contents
+            }
+        }
+
+        mutating func next() -> UInt8? {
             guard self.contents > 0 else { return nil }
             defer { self.contents >>= 8 }
-            return CChar(bitPattern: UInt8(self.contents & 0xFF))
+            if self.contents == 0xFF {
+                return 0
+            } else {
+                return UInt8(self.contents & 0xFF)
+            }
         }
     }
 
@@ -79,7 +90,7 @@ func utf8LeadingByte(_ value: UInt32, sequenceCount: Int) -> UInt32 {
         case 3:
             return (value & 0b1111) | 0b1110_0000
         case 4:
-            return (value & 0b0111) | 0b1111_000
+            return (value & 0b0111) | 0b1111_0000
         default:
             fatalError("Illegal byte count")
     }
@@ -91,8 +102,8 @@ func utf8TrailingByte(_ value: UInt32) -> UInt32 {
 }
 
 @inline(__always)
-func asciiHexToUTF8<Chars : Collection>(_ chars: Chars) -> (Int, UTF8Buffer)
-    where Chars.Element == CChar
+func asciiHexToUTF8<C : Collection>(_ chars: C) -> (Int, UTF8Buffer)
+    where C.Element : BinaryInteger
 {
     var codepoint: UInt32 = 0
     var consumedCount = 0
@@ -106,43 +117,55 @@ func asciiHexToUTF8<Chars : Collection>(_ chars: Chars) -> (Int, UTF8Buffer)
     return (consumedCount, UTF8Buffer(codepoint))
 }
 
+extension UnsafePointer where Pointee == UInt8 {
+    @inline(__always)
+    func indexOfNul() -> Int {
+        var pointer = self
+        while pointer.pointee != 0x0 {
+            pointer = pointer.successor()
+        }
+        return self.distance(to: pointer)
+    }
+}
+
 func renderEscapes(in s: String) -> String {
 
-   let processed: [Int8] = s.withCString {
-        let count = s.utf8.count + 1
-        let buf = UnsafeBufferPointer(start: $0, count: count)
+   let processed: [UInt8] = s.withCString(encodedAs: UTF8.self) { (base) in
+        let count = base.indexOfNul()
+        guard count > 0 else { return [] }
+        let buf = UnsafeBufferPointer(start: base, count: count)
 
-        var result: [CChar] = []
+        var result: [UInt8] = []
         result.reserveCapacity(count)
 
         var index = buf.startIndex
-        while let nextEscape = buf[index...].firstIndex(of: .asciiSlash) {
+        while let nextEscape = buf[index...].firstIndex(of: ASCII.slash) {
             let charIndex = nextEscape + 1
-            guard [CChar.upperU, CChar.lowerU].contains(buf[charIndex]) else {
+            guard [ASCII.upperU, ASCII.lowerU].contains(buf[charIndex]) else {
                 result.append(contentsOf: buf[index..<charIndex + 1])
                 index = charIndex + 1
                 continue
             }
 
             let digitStart = charIndex + 1
-            let (offset, bytes) = asciiHexToUTF8(buf[digitStart...])
+            let (offset, encoded) = asciiHexToUTF8(buf[digitStart...])
             if offset > 0 {
                 result.append(contentsOf: buf[index..<nextEscape])
-                result.append(contentsOf: bytes)
-                index = digitStart + offset
+                result.append(contentsOf: encoded)
             }
             else {
                 result.append(contentsOf: buf[index..<digitStart])
-                index = digitStart
             }
+
+            index = digitStart + offset
         }
 
         result.append(contentsOf: buf[index...])
         return result
     }
 
-    return String(cString: processed, encoding: .utf8)!
+    return String(bytes: processed, encoding: .utf8)!
 }
 
-let s = #"\u2615 Caffe\u0300 corretto"#
-print(renderEscapes(in: s))
+let s = #"\u2615 Caffe\u00000300 corretto! \u01f600 Mi piace molto"#
+print("'\(renderEscapes(in: s))'")
