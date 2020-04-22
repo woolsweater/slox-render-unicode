@@ -14,13 +14,14 @@ func renderEscapes(in s: String) -> String {
         }
 
         let digitStart = s.index(after: charIndex)
-        let digitEnd = s.index(digitStart, offsetBy: 4)
         guard
+            // Simplification for testing: all escapes must be followed by space
+            let digitEnd = s[digitStart...].firstIndex(of: " "),
             let value = Int(s[digitStart..<digitEnd], radix: 16),
             let scalar = Unicode.Scalar(value) else
         {
-            rendered.append(contentsOf: s[index..<digitEnd])
-            index = digitEnd
+            rendered.append(contentsOf: s[index..<digitStart])
+            index = digitStart
             continue
         }
 
@@ -33,5 +34,8 @@ func renderEscapes(in s: String) -> String {
     return rendered
 }
 
-let s = #"\u2615 Caffe\u0300 corretto"#
-print(renderEscapes(in: s))
+//MARK:- Script
+
+let source = try! String(contentsOfFile: "input.txt")
+let rendered = renderEscapes(in: source)
+print(rendered)

@@ -167,5 +167,8 @@ func renderEscapes(in s: String) -> String {
     return String(bytes: processed, encoding: .utf8)!
 }
 
-let s = #"\u2615 Caffe\u00000300 corretto! \u01f600 Mi piace molto"#
-print("'\(renderEscapes(in: s))'")
+//MARK:- Script
+
+let source = try! String(contentsOfFile: "input.txt")
+let rendered = renderEscapes(in: source)
+print(rendered)
