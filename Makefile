@@ -30,10 +30,10 @@ input.txt: $(BUILD_DIR)/generateInput
 	$(BUILD_DIR)/generateInput $(INPUT_SIZE) > input.txt
 
 $(BUILD_DIR)/raw: raw.swift | build
-	swiftc raw.swift -o $(BUILD_DIR)/raw
+	swiftc -O raw.swift -o $(BUILD_DIR)/raw
 	
 $(BUILD_DIR)/useCharacter: useCharacter.swift | $(BUILD_DIR)
-	swiftc useCharacter.swift -o $(BUILD_DIR)/useCharacter
+	swiftc -O useCharacter.swift -o $(BUILD_DIR)/useCharacter
 
 $(BUILD_DIR)/generateInput: generateInput.swift | $(BUILD_DIR)
 	swiftc generateInput.swift -o $(BUILD_DIR)/generateInput
