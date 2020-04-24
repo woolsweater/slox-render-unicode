@@ -23,7 +23,7 @@ func randomUnicodeEscape() -> String {
     } else {
         point = UInt32.random(in: 0xE000...0x10FFF)
     }
-    return String(format: "\\u%*0x", Int.random(in: 2...8), point)
+    return String(format: #"\u{%*0x}"#, Int.random(in: 2...8), point)
 }
 
 /**
@@ -36,6 +36,7 @@ func randomSegment() -> String {
     return choices.joined(separator: " ")
 }
 
+//TODO: Render the text from Swift, too, so that the ouput can be compared
 var output = randomSegment()
 let segmentCount = Int(ProcessInfo.processInfo.arguments[1])!
 for _ in 0..<segmentCount {

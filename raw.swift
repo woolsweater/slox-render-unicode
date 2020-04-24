@@ -4,6 +4,8 @@ enum ASCII {
     static let slash = Character("\\").asciiValue!
     static let upperU = Character("U").asciiValue!
     static let lowerU = Character("u").asciiValue!
+    static let openBrace = Character("{").asciiValue!
+    static let closeBrace = Character("}").asciiValue!
 }
 
 extension BinaryInteger {
@@ -102,19 +104,17 @@ func utf8TrailingByte(_ value: UInt32) -> UInt32 {
 }
 
 @inline(__always)
-func asciiHexToUTF8<C : Collection>(_ chars: C) -> (Int, UTF8Buffer)
+func asciiHexToUTF8<C : Collection>(_ chars: C) -> UTF8Buffer
     where C.Element : BinaryInteger
 {
     var codepoint: UInt32 = 0
-    var consumedCount = 0
-    for (i, char) in chars.enumerated() {
+    for char in chars {
         guard let value = char.asciiHexDigitValue else { break }
-        consumedCount = i + 1
         codepoint <<= 4
         codepoint += UInt32(value)
     }
 
-    return (consumedCount, UTF8Buffer(codepoint))
+    return UTF8Buffer(codepoint)
 }
 
 extension UnsafePointer where Pointee == UInt8 {
@@ -141,23 +141,28 @@ func renderEscapes(in s: String) -> String {
         var index = buf.startIndex
         while let nextEscape = buf[index...].firstIndex(of: ASCII.slash) {
             let charIndex = nextEscape + 1
-            guard [ASCII.upperU, ASCII.lowerU].contains(buf[charIndex]) else {
-                result.append(contentsOf: buf[index..<charIndex + 1])
-                index = charIndex + 1
+            guard
+                buf[charIndex] == ASCII.lowerU,
+                buf[charIndex + 1] == ASCII.openBrace else
+            {
+                result.append(contentsOf: buf[index...charIndex])
+                index = charIndex
                 continue
             }
 
-            let digitStart = charIndex + 1
-            let (offset, encoded) = asciiHexToUTF8(buf[digitStart...])
-            if offset > 0 {
-                result.append(contentsOf: buf[index..<nextEscape])
-                result.append(contentsOf: encoded)
-            }
-            else {
+            let digitStart = charIndex + 2
+            let digitEndLimit = min(count, digitStart + 8)
+            let braceSearchRange = digitStart..<digitEndLimit
+            guard let digitEnd = buf[braceSearchRange].firstIndex(of: ASCII.closeBrace) else {
                 result.append(contentsOf: buf[index..<digitStart])
+                index = digitStart
+                continue
             }
 
-            index = digitStart + offset
+            let encoded = asciiHexToUTF8(buf[digitStart..<digitEnd])
+            result.append(contentsOf: buf[index..<nextEscape])
+            result.append(contentsOf: encoded)
+            index = digitEnd + 1    // Skip ending brace
         }
 
         result.append(contentsOf: buf[index...])
