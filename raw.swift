@@ -9,6 +9,14 @@ enum ASCII {
 }
 
 extension BinaryInteger {
+    /**
+     The numerical value of the ASCII hexadecimal digit
+     encoded by this number. `nil` if this number is not
+     the ASCII encoding of a hexadecimal digit.
+     - remark: Uppercase and lowercase ASCII are supported.
+     - example: 67 is the ASCII encoding for the letter 'C',
+     whose value as a hexadecimal digit is 12.
+     */
     var asciiHexDigitValue: Self? {
         switch self {
             // 0-9
@@ -151,7 +159,7 @@ func renderEscapes(in s: String) -> String {
             }
 
             let digitStart = charIndex + 2
-            let digitEndLimit = min(count, digitStart + 8)
+            let digitEndLimit = min(count, digitStart + 9)
             let braceSearchRange = digitStart..<digitEndLimit
             guard let digitEnd = buf[braceSearchRange].firstIndex(of: ASCII.closeBrace) else {
                 result.append(contentsOf: buf[index..<digitStart])
