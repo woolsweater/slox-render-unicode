@@ -5,38 +5,45 @@
 # megabytes.
 INPUT_SIZE ?= 100000
 
-BUILD_DIR = ./build
+# Type of optimization to apply to the programs under test
+# Supply one of the valid suffixes to swiftc's `-O` flag:
+# `none`, `unchecked`, `size`, or the empty string
+# Defaults to standard optimization, equivalent to the empty string
+OPTIMIZATION ?= ""
+
+optimization_flag := -O$(OPTIMIZATION)
+build_dir := ./build
 	
 #--- Targets to be run as "commands"
 
-all: input.txt $(BUILD_DIR)/raw $(BUILD_DIR)/useCharacter
+all: input.txt $(build_dir)/raw $(build_dir)/useCharacter
 
-time: input.txt $(BUILD_DIR)/raw $(BUILD_DIR)/useCharacter
-	time $(BUILD_DIR)/raw >/dev/null
-	time $(BUILD_DIR)/useCharacter >/dev/null
+time: input.txt $(build_dir)/raw $(build_dir)/useCharacter
+	time $(build_dir)/raw >/dev/null
+	time $(build_dir)/useCharacter >/dev/null
 
 # By default, running `all` will preserve the input file;
 # it can be explicitly recreated with this target.
-regen_input: $(BUILD_DIR)/generateInput
-	$(BUILD_DIR)/generateInput $(INPUT_SIZE) > input.txt
+regen_input: $(build_dir)/generateInput
+	$(build_dir)/generateInput $(INPUT_SIZE) > input.txt
 
 clean:
-	-rm -rf $(BUILD_DIR)
+	-rm -rf $(build_dir)
 	-rm -f input.txt
 
 #--- Internal targets
 
-input.txt: $(BUILD_DIR)/generateInput
-	$(BUILD_DIR)/generateInput $(INPUT_SIZE) > input.txt
+input.txt: $(build_dir)/generateInput
+	$(build_dir)/generateInput $(INPUT_SIZE) > input.txt
 
-$(BUILD_DIR)/raw: raw.swift | build
-	swiftc -O raw.swift -o $(BUILD_DIR)/raw
+$(build_dir)/raw: raw.swift | build
+	swiftc $(optimization_flag) raw.swift -o $(build_dir)/raw
 	
-$(BUILD_DIR)/useCharacter: useCharacter.swift | $(BUILD_DIR)
-	swiftc -O useCharacter.swift -o $(BUILD_DIR)/useCharacter
+$(build_dir)/useCharacter: useCharacter.swift | $(build_dir)
+	swiftc $(optimization_flag) useCharacter.swift -o $(build_dir)/useCharacter
 
-$(BUILD_DIR)/generateInput: generateInput.swift | $(BUILD_DIR)
-	swiftc generateInput.swift -o $(BUILD_DIR)/generateInput
+$(build_dir)/generateInput: generateInput.swift | $(build_dir)
+	swiftc -O generateInput.swift -o $(build_dir)/generateInput
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(build_dir):
+	mkdir -p $(build_dir)
