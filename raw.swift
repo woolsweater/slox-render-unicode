@@ -184,4 +184,4 @@ func renderEscapes(in s: String) -> String {
 
 let source = try! String(contentsOfFile: "input.txt")
 let rendered = renderEscapes(in: source)
-print(rendered)
+print(rendered, terminator: "")

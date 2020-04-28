@@ -1,4 +1,4 @@
-.PHONY: all clean time regen_input
+.PHONY: all clean time diff regen_input
 
 # Number of text segments in the generated input text, each of which
 # will have some size variation. 100,000 produces a file of a few
@@ -13,6 +13,7 @@ OPTIMIZATION ?= ""
 
 optimization_flag := -O$(OPTIMIZATION)
 build_dir := ./build
+output_dir := ./output
 	
 #--- Targets to be run as "commands"
 
@@ -22,21 +23,31 @@ time: input.txt $(build_dir)/raw $(build_dir)/useCharacter
 	time $(build_dir)/raw >/dev/null
 	time $(build_dir)/useCharacter >/dev/null
 
+diff: $(output_dir)/swift-output.txt $(output_dir)/raw-output.txt $(output_dir)/character-output.txt
+# diff will return 1 if it finds differences, which make interprets as an error
+	-diff $(output_dir)/swift-output.txt $(output_dir)/raw-output.txt > $(output_dir)/raw.diff
+	-diff $(output_dir)/swift-output.txt $(output_dir)/character-output.txt > $(output_dir)/character.diff
+
 # By default, running `all` will preserve the input file;
 # it can be explicitly recreated with this target.
 regen_input: $(build_dir)/generateInput
-	$(build_dir)/generateInput $(INPUT_SIZE) > input.txt
+	$(build_dir)/generateInput $(INPUT_SIZE) | fold -w 80 -s > input.txt
 
 clean:
 	-rm -rf $(build_dir)
+	-rm -rf $(output_dir)
 	-rm -f input.txt
 
 #--- Internal targets
 
-input.txt: $(build_dir)/generateInput
-	$(build_dir)/generateInput $(INPUT_SIZE) > input.txt
+#-- Executables
 
-$(build_dir)/raw: raw.swift | build
+input.txt: $(build_dir)/generateInput
+# Hard wrapping makes seeing diff problems a little easier; note this necessitates
+# a small amout of extra work in creating the `swiftRender` tool (multiline strings)
+	$(build_dir)/generateInput $(INPUT_SIZE) | fold -w 80 -s > input.txt	
+
+$(build_dir)/raw: raw.swift | $(build_dir)
 	swiftc $(optimization_flag) raw.swift -o $(build_dir)/raw
 	
 $(build_dir)/useCharacter: useCharacter.swift | $(build_dir)
@@ -45,5 +56,26 @@ $(build_dir)/useCharacter: useCharacter.swift | $(build_dir)
 $(build_dir)/generateInput: generateInput.swift | $(build_dir)
 	swiftc -O generateInput.swift -o $(build_dir)/generateInput
 
+$(build_dir)/swiftRender: input.txt | $(build_dir)
+	echo 'print("""' > $(build_dir)/swiftRender
+	cat input.txt >> $(build_dir)/swiftRender
+	echo '""")' >> $(build_dir)/swiftRender
+
+#-- Data
+
+$(output_dir)/swift-output.txt: input.txt $(build_dir)/swiftRender | $(output_dir)
+	swift $(build_dir)/swiftRender > $(output_dir)/swift-output.txt
+
+$(output_dir)/raw-output.txt: input.txt $(build_dir)/raw | $(output_dir)
+	$(build_dir)/raw > $(output_dir)/raw-output.txt
+
+$(output_dir)/character-output.txt: input.txt $(build_dir)/useCharacter | $(output_dir)
+	$(build_dir)/useCharacter > $(output_dir)/character-output.txt
+
+#-- Directories
+
 $(build_dir):
 	mkdir -p $(build_dir)
+
+$(output_dir):
+	mkdir -p $(output_dir)

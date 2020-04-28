@@ -20,7 +20,7 @@ func randomUnicodeEscape() -> String {
     // These codepoints cannot be used in Swift string literals:
     // https://github.com/apple/swift/blob/a11cc4fcfc1ae8b30a48e246e983d3ffc5121d79/lib/Parse/Lexer.cpp#L74
     let reservedRange: ClosedRange<UInt32> = 0xFDD0...0xFDEF
-    var point: UInt32 = 0xFDD0
+    var point: UInt32 = reservedRange.lowerBound
     while reservedRange ~= point {
         if Bool.random() {
             // Start at printable ASCII chars
