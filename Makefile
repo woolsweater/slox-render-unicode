@@ -19,20 +19,20 @@ output_dir := ./output
 	
 #--- Targets to be run as "commands"
 
-all: input.txt $(build_dir)/raw $(build_dir)/rawMorePointer $(build_dir)/useCharacter $(build_dir)/c_impl
+all: input.txt $(build_dir)/rawSlice $(build_dir)/rawMorePointer $(build_dir)/useCharacter
 
-time: input.txt $(build_dir)/raw $(build_dir)/rawMorePointer $(build_dir)/useCharacter $(build_dir)/c_impl
+time: input.txt $(build_dir)/rawSlice $(build_dir)/rawMorePointer $(build_dir)/useCharacter
 	time $(build_dir)/raw >/dev/null
-	time $(build_dir)/rawMorePointer >/dev/null	
+	time $(build_dir)/rawSlice >/dev/null
+	time $(build_dir)/rawMorePointer >/dev/null
 	time $(build_dir)/useCharacter >/dev/null
-	time $(build_dir)/c_impl >/dev/null
 
-diff: $(output_dir)/swift-output.txt $(output_dir)/raw-output.txt $(output_dir)/rawMore-output.txt $(output_dir)/character-output.txt $(output_dir)/c-output.txt
+diff: $(output_dir)/swift-output.txt $(output_dir)/raw-output.txt $(output_dir)/rawSlice-output.txt $(output_dir)/rawMore-output.txt $(output_dir)/character-output.txt
 # diff will return 1 if it finds differences, which make interprets as an error
 	-diff $(output_dir)/swift-output.txt $(output_dir)/raw-output.txt > $(output_dir)/raw.diff
+	-diff $(output_dir)/swift-output.txt $(output_dir)/rawSlice-output.txt > $(output_dir)/rawSlice.diff
 	-diff $(output_dir)/swift-output.txt $(output_dir)/rawMore-output.txt > $(output_dir)/rawMore.diff
 	-diff $(output_dir)/swift-output.txt $(output_dir)/character-output.txt > $(output_dir)/character.diff
-	-diff $(output_dir)/swift-output.txt $(output_dir)/c-output.txt > $(output_dir)/c.diff
 
 # By default, running `all` will preserve the input file;
 # it can be explicitly recreated with this target.
@@ -56,14 +56,14 @@ input.txt: $(build_dir)/generateInput
 $(build_dir)/raw: raw.swift | $(build_dir)
 	swiftc $(optimization_flag) raw.swift -o $(build_dir)/raw
 	
+$(build_dir)/rawSlice: rawSlice.swift | $(build_dir)
+	swiftc $(optimization_flag) rawSlice.swift -o $(build_dir)/rawSlice
+	
 $(build_dir)/rawMorePointer: rawMorePointer.swift | $(build_dir)
 	swiftc $(optimization_flag) rawMorePointer.swift -o $(build_dir)/rawMorePointer
 	
 $(build_dir)/useCharacter: useCharacter.swift | $(build_dir)
 	swiftc $(optimization_flag) useCharacter.swift -o $(build_dir)/useCharacter
-
-$(build_dir)/c_impl: c_impl.c | $(build_dir)
-	cc $(c_optimization_flag) c_impl.c -o $(build_dir)/c_impl
 
 $(build_dir)/generateInput: generateInput.swift | $(build_dir)
 	swiftc -O generateInput.swift -o $(build_dir)/generateInput
@@ -81,14 +81,14 @@ $(output_dir)/swift-output.txt: input.txt $(build_dir)/swiftRender | $(output_di
 $(output_dir)/raw-output.txt: input.txt $(build_dir)/raw | $(output_dir)
 	$(build_dir)/raw > $(output_dir)/raw-output.txt
 
+$(output_dir)/rawSlice-output.txt: input.txt $(build_dir)/rawSlice | $(output_dir)
+	$(build_dir)/rawSlice > $(output_dir)/rawSlice-output.txt
+
 $(output_dir)/rawMore-output.txt: input.txt $(build_dir)/rawMorePointer | $(output_dir)
 	$(build_dir)/rawMorePointer > $(output_dir)/rawMore-output.txt
 
 $(output_dir)/character-output.txt: input.txt $(build_dir)/useCharacter | $(output_dir)
 	$(build_dir)/useCharacter > $(output_dir)/character-output.txt
-
-$(output_dir)/c-output.txt: input.txt $(build_dir)/c_impl | $(output_dir)
-	$(build_dir)/c_impl > $(output_dir)/c-output.txt
 
 #-- Directories
 
