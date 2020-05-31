@@ -6,6 +6,10 @@ enum ASCII {
     static let lowerU = Character("u").asciiValue!
     static let openBrace = Character("{").asciiValue!
     static let closeBrace = Character("}").asciiValue!
+
+    static func isHexDigit(_ char: UInt8) -> Bool {
+        return char.asciiHexDigitValue != nil
+    }
 }
 
 extension BinaryInteger {
@@ -88,16 +92,19 @@ func utf8TrailingByte(_ value: UInt32) -> UInt32 {
     (value & 0b11_1111) | 0b1000_0000
 }
 
-@inline(__always)
-func asciiHexToUTF8(_ chars: UnsafePointer<UInt8>, _ count: Int) -> (UInt32, Int) {
+func parseHexEscape(_ start: UnsafePointer<UInt8>) -> (UInt32, end: UnsafePointer<UInt8>)? {
     var codepoint: UInt32 = 0
-    for i in 0..<count {
-        guard let value = chars[i].asciiHexDigitValue else { break }
+    var current = start
+    while let value = current.pointee.asciiHexDigitValue {
         codepoint <<= 4
         codepoint += UInt32(value)
+        current += 1
     }
-
-    return codepoint.toUTF8()
+    
+    // The highest codepoint is U+10FFFF, six hexadecimal digits,
+    // but we allow leading zeroes, to a max total length of 8
+    guard 1...8 ~= start.distance(to: current) else { return nil }
+    return (codepoint, current)
 }
 
 extension UnsafePointer where Pointee == UInt8 {
@@ -151,26 +158,28 @@ func renderEscapes(in s: String) -> String {
         while let nextEscape = currentSource.strChr(ASCII.slash) {
             let escapeChar = nextEscape + 1
             let braceChar = nextEscape + 2
+            let digitStart = braceChar + 1
             guard
                 escapeChar.pointee == ASCII.lowerU,
-                braceChar.pointee == ASCII.openBrace else
+                braceChar.pointee == ASCII.openBrace,
+                ASCII.isHexDigit(digitStart.pointee) else
             {
                 currentDest.appendContents(of: currentSource, upTo: nextEscape)
                 currentSource = nextEscape
                 continue
             }
 
-            let digitStart = braceChar + 1
-            guard let digitEnd = digitStart.memChr(ASCII.closeBrace, limit: 9) else {
+            guard
+                let (codepoint, digitEnd) = parseHexEscape(digitStart),
+                digitEnd.pointee == ASCII.closeBrace else
+            {
+                // Invalid escape sequence; in real life we would signal an error
                 currentDest.appendContents(of: currentSource, upTo: digitStart)
                 currentSource = digitStart
                 continue
             }
 
-            //TODO: This doesn't account for what's between the braces
-            // not being entirely hex digits
-            let digitCount = digitEnd - digitStart
-            let (encoded, encodedLength) = asciiHexToUTF8(digitStart, digitCount)
+            let (encoded, encodedLength) = codepoint.toUTF8()
             currentDest.appendContents(of: currentSource, upTo: nextEscape)
             _ = withUnsafePointer(to: encoded) {
                 memcpy(currentDest, UnsafeRawPointer($0), encodedLength)

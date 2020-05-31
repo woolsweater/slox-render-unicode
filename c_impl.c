@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <assert.h>
+#include <ctype.h>
 
 /**
  * Open the file at the given path and read its entire contents,
@@ -47,29 +47,6 @@ static char * append_contents(char * dest, const char * src, const char * end)
     size_t range = end - src;
     memcpy(dest, src, range);
     return dest + range;
-}
-
-/**
- * Given a character that is an ASCII hexadecimal digit (decimal 0-9,
- * capital A-F, lowercase a-f), produce its numerical value.
- * If the character is not a hexadecimal digit, returns `UINT8_MAX`
- * - example: 'c' (ASCII encoding 67) interpreted as a hexadecimal
- * digit has the value 12.
- */
-static uint8_t ascii_hex_digit_value(char c)
-{
-    if (48 <= c && c <= 59) {
-        // Digits 0-9
-        return c - 48;
-    } else if (65 <= c && c <= 70) {
-        // Digits A-F
-        return (c - 65) + 0xa;
-    } else if (97 <= c && c <= 102) {
-        // Digits a-f
-        return (c - 97) + 0xa;
-    } else {
-        return UINT8_MAX;
-    }
 }
 
 /**
@@ -130,24 +107,6 @@ static uint32_t codepoint_to_utf8(uint32_t codepoint, size_t *encoded_length)
 }
 
 /**
- * Parse a sequence of hexadecimal digits to their numerical value.
- */
-static uint32_t ascii_hex_to_utf8(const char * source, size_t count, size_t *encoded_length)
-{
-    uint32_t codepoint = 0;
-    for (size_t i = 0; i < count; i++) {
-        uint8_t value = ascii_hex_digit_value(source[i]);
-        if (value > 0xf) {
-            break;
-        }
-        codepoint <<= 4;
-        codepoint += value;
-    }
-
-    return codepoint_to_utf8(codepoint, encoded_length);
-}
-
-/**
  * Recognize Unicode escapes in the form \u{NNNNN} and encode the
  * represented codepoints into UTF-8.
  * - returns: A string owned by the caller, with all non-escape
@@ -173,7 +132,8 @@ static char * render_escapes(const char * source)
     while ((next_escape = strchr(current_source, '\\'))) {
         const char * const escape_char = next_escape + 1;
         const char * const brace_char = next_escape + 2;
-        if ('u' != *escape_char || '{' != *brace_char) {
+        const char * const digit_start = brace_char + 1;
+        if ('u' != *escape_char || '{' != *brace_char || !isxdigit(*digit_start)) {
             current_dest = append_contents(current_dest,
                                            current_source,
                                            next_escape);
@@ -181,9 +141,13 @@ static char * render_escapes(const char * source)
             continue;
         }
      
-        const char * const digit_start = brace_char + 1;
-        const char * const digit_end = memchr(digit_start, '}', 9);
-        if (!digit_end) {
+        char * digit_end = NULL;
+        const uint32_t codepoint = strtol(digit_start, &digit_end, 16);
+        const size_t digit_count = digit_end - digit_start;
+        // The highest codepoint is U+10FFFF, six hexadecimal digits,
+        // but we allow leading zeroes, to a total length of 8
+        if (*digit_end != '}' || digit_count < 1 || digit_count > 8) {
+            // Invalid escape sequence; in real life we would signal an error
             current_dest = append_contents(current_dest,
                                            current_source,
                                            digit_start);
@@ -191,12 +155,8 @@ static char * render_escapes(const char * source)
             continue;
         }
 
-        size_t digit_count = digit_end - digit_start;
         size_t encoded_length = 0;
-        //TODO: This doesn't account for what's between the braces
-        // not being entirely hex digits
-        const uint32_t encoded = ascii_hex_to_utf8(digit_start,
-                                                   digit_count,
+        const uint32_t encoded = codepoint_to_utf8(codepoint,
                                                    &encoded_length);
         current_dest = append_contents(current_dest,
                                        current_source,

@@ -112,12 +112,12 @@ func utf8TrailingByte(_ value: UInt32) -> UInt32 {
 }
 
 @inline(__always)
-func asciiHexToUTF8<C : Collection>(_ chars: C) -> UTF8Buffer
+func asciiHexToUTF8<C : Collection>(_ chars: C) -> UTF8Buffer?
     where C.Element : BinaryInteger
 {
     var codepoint: UInt32 = 0
     for char in chars {
-        guard let value = char.asciiHexDigitValue else { break }
+        guard let value = char.asciiHexDigitValue else { return nil }
         codepoint <<= 4
         codepoint += UInt32(value)
     }
@@ -151,7 +151,8 @@ func renderEscapes(in s: String) -> String {
             let charIndex = nextEscape + 1
             guard
                 buf[charIndex] == ASCII.lowerU,
-                buf[charIndex + 1] == ASCII.openBrace else
+                buf[charIndex + 1] == ASCII.openBrace,
+                buf[charIndex + 2].asciiHexDigitValue != nil else
             {
                 result.append(contentsOf: buf[index...charIndex])
                 index = charIndex
@@ -159,15 +160,20 @@ func renderEscapes(in s: String) -> String {
             }
 
             let digitStart = charIndex + 2
-            let digitEndLimit = min(count, digitStart + 9)
-            let braceSearchRange = digitStart..<digitEndLimit
-            guard let digitEnd = buf[braceSearchRange].firstIndex(of: ASCII.closeBrace) else {
+            // The highest codepoint is U+10FFFF, six hexadecimal digits,
+            // but we allow leading zeroes, to a max total length of 8
+            let digitEndLimit = min(count, digitStart + 8)
+            let braceSearchRange = digitStart...digitEndLimit
+            guard
+                let digitEnd = buf[braceSearchRange].firstIndex(of: ASCII.closeBrace),
+                let encoded = asciiHexToUTF8(buf[digitStart..<digitEnd]) else
+            {
+                // Invalid escape sequence; in real life we would signal an error
                 result.append(contentsOf: buf[index..<digitStart])
                 index = digitStart
                 continue
             }
 
-            let encoded = asciiHexToUTF8(buf[digitStart..<digitEnd])
             result.append(contentsOf: buf[index..<nextEscape])
             result.append(contentsOf: encoded)
             index = digitEnd + 1    // Skip ending brace
