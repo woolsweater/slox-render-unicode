@@ -8,33 +8,7 @@ enum ASCII {
     static let closeBrace = Character("}").asciiValue!
 
     static func isHexDigit(_ char: UInt8) -> Bool {
-        return char.asciiHexDigitValue != nil
-    }
-}
-
-extension BinaryInteger {
-    /**
-     The numerical value of the ASCII hexadecimal digit
-     encoded by this number. `nil` if this number is not
-     the ASCII encoding of a hexadecimal digit.
-     - remark: Uppercase and lowercase ASCII are supported.
-     - example: 67 is the ASCII encoding for the letter 'C',
-     whose value as a hexadecimal digit is 12.
-     */
-    var asciiHexDigitValue: Self? {
-        switch self {
-            // 0-9
-            case 48...59:
-                return self - 48
-            // A-F
-            case 65...70:
-                return (self - 65) + 0xa
-            // a-f
-            case 97...102:
-                return (self - 97) + 0xa
-            default:
-                return nil
-        }
+        return isxdigit(Int32(char)) != 0
     }
 }
 
@@ -93,18 +67,25 @@ func utf8TrailingByte(_ value: UInt32) -> UInt32 {
 }
 
 func parseHexEscape(_ start: UnsafePointer<UInt8>) -> (UInt32, end: UnsafePointer<UInt8>)? {
-    var codepoint: UInt32 = 0
-    var current = start
-    while let value = current.pointee.asciiHexDigitValue {
-        codepoint <<= 4
-        codepoint += UInt32(value)
-        current += 1
-    }
-    
     // The highest codepoint is U+10FFFF, six hexadecimal digits,
     // but we allow leading zeroes, to a max total length of 8
-    guard 1...8 ~= start.distance(to: current) else { return nil }
-    return (codepoint, current)
+    let maxEscapeDigitLength = 8
+    var end: UnsafeMutablePointer<UInt8>? = UnsafeMutablePointer(mutating: start)
+    let parsed = start.withMemoryRebound(to: Int8.self, capacity: maxEscapeDigitLength) {
+        (start) in
+        withUnsafeMutablePointer(to: &end) {
+            // Rebinding the inner pointer prevents having to rebind through a raw pointer
+            // (and picking an arbitrary capacity) when returning the final result
+            $0.withMemoryRebound(to: UnsafeMutablePointer<Int8>?.self, capacity: maxEscapeDigitLength + 1) {
+                (endPtr) in
+                UInt32(strtol(start, endPtr, 16))
+            }
+        }
+    }
+    
+    guard 1...maxEscapeDigitLength ~= start.distance(to: end!) else { return nil }
+    
+    return (parsed, UnsafePointer(end!))
 }
 
 extension UnsafePointer where Pointee == UInt8 {
@@ -157,7 +138,7 @@ func renderEscapes(in s: String) -> String {
         var currentSource = base
         while let nextEscape = currentSource.strChr(ASCII.slash) {
             let escapeChar = nextEscape + 1
-            let braceChar = nextEscape + 2
+            let braceChar = escapeChar + 1
             let digitStart = braceChar + 1
             guard
                 escapeChar.pointee == ASCII.lowerU,
