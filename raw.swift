@@ -1,11 +1,18 @@
 import Foundation
 
 enum ASCII {
-    static let slash = Character("\\").asciiValue!
-    static let upperU = Character("U").asciiValue!
+    static let lowerN = Character("n").asciiValue!
+    static let lowerR = Character("r").asciiValue!
+    static let lowerT = Character("t").asciiValue!
     static let lowerU = Character("u").asciiValue!
+    static let slash = Character(#"\"#).asciiValue!
+    static let doubleQuote = Character("\"").asciiValue!
     static let openBrace = Character("{").asciiValue!
     static let closeBrace = Character("}").asciiValue!
+    
+    static let newline = Character("\n").asciiValue!
+    static let carriageReturn = Character("\r").asciiValue!
+    static let tab = Character("\t").asciiValue!
 }
 
 extension BinaryInteger {
@@ -136,6 +143,23 @@ extension UnsafePointer where Pointee == UInt8 {
     }
 }
 
+func encodeSimpleEscape(_ char: UInt8) -> UInt8? {
+    switch char {
+        case ASCII.lowerN:
+            return ASCII.newline
+        case ASCII.lowerR:
+            return ASCII.carriageReturn
+        case ASCII.lowerT:
+            return ASCII.tab
+        case ASCII.doubleQuote:
+            return ASCII.doubleQuote
+        case ASCII.slash:
+            return ASCII.slash
+        default:
+            return nil
+    }
+}
+
 func renderEscapes(in s: String) -> String {
 
    let processed: [UInt8] = s.withCString(encodedAs: UTF8.self) { (base) in
@@ -149,6 +173,13 @@ func renderEscapes(in s: String) -> String {
         var index = buf.startIndex
         while let nextEscape = buf[index...].firstIndex(of: ASCII.slash) {
             let charIndex = nextEscape + 1
+            if let encoded = encodeSimpleEscape(buf[charIndex]) {
+                result.append(contentsOf: buf[index..<nextEscape])
+                result.append(encoded)
+                index = charIndex + 1
+                continue
+            }
+            
             guard
                 buf[charIndex] == ASCII.lowerU,
                 buf[charIndex + 1] == ASCII.openBrace,

@@ -1,11 +1,18 @@
 import Foundation
 
 enum ASCII {
-    static let slash = Character("\\").asciiValue!
-    static let upperU = Character("U").asciiValue!
+    static let lowerN = Character("n").asciiValue!
+    static let lowerR = Character("r").asciiValue!
+    static let lowerT = Character("t").asciiValue!
     static let lowerU = Character("u").asciiValue!
+    static let slash = Character(#"\"#).asciiValue!
+    static let doubleQuote = Character("\"").asciiValue!
     static let openBrace = Character("{").asciiValue!
     static let closeBrace = Character("}").asciiValue!
+    
+    static let newline = Character("\n").asciiValue!
+    static let carriageReturn = Character("\r").asciiValue!
+    static let tab = Character("\t").asciiValue!
 
     static func isHexDigit(_ char: UInt8) -> Bool {
         return char.asciiHexDigitValue != nil
@@ -146,6 +153,23 @@ extension UnsafeMutablePointer where Pointee == UInt8 {
     }
 }
 
+func encodeSimpleEscape(_ char: UInt8) -> UInt8? {
+    switch char {
+        case ASCII.lowerN:
+            return ASCII.newline
+        case ASCII.lowerR:
+            return ASCII.carriageReturn
+        case ASCII.lowerT:
+            return ASCII.tab
+        case ASCII.doubleQuote:
+            return ASCII.doubleQuote
+        case ASCII.slash:
+            return ASCII.slash
+        default:
+            return nil
+    }
+}
+
 func renderEscapes(in s: String) -> String {
 
     let processed: UnsafeMutableBufferPointer<UInt8> = s.withCString(encodedAs: UTF8.self) { (base) in
@@ -157,6 +181,16 @@ func renderEscapes(in s: String) -> String {
         var currentSource = base
         while let nextEscape = currentSource.strChr(ASCII.slash) {
             let escapeChar = nextEscape + 1
+            if let encoded = encodeSimpleEscape(escapeChar.pointee) {
+                currentDest.appendContents(of: currentSource, upTo: nextEscape)
+                _ = withUnsafePointer(to: encoded) {
+                    memcpy(currentDest, UnsafeRawPointer($0), 1)
+                }
+                currentDest += 1
+                currentSource = escapeChar + 1
+                continue
+            }
+            
             let braceChar = nextEscape + 2
             let digitStart = braceChar + 1
             guard

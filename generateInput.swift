@@ -10,6 +10,7 @@ let words = [
     "phosphoglyceraldehyde", "supercalifragilisticexpialidocious",
     "antidisestablishmentarianism",
     "I", "am", "very", "model", "modern", "major", "general",
+    #"\n"#, #"\r"#, #"\t"#, #"\""#, #"\\"#,
 ]
 
 /**

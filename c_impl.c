@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 /**
  * Open the file at the given path and read its entire contents,
@@ -107,6 +108,35 @@ static uint32_t codepoint_to_utf8(uint32_t codepoint, size_t *encoded_length)
 }
 
 /**
+ * Examine the input char; if it is a valid single-character escape,
+ * put its encoded value into `encoded` and return `true`.
+ * If not, return `false` and leave the contents of `encoded`
+ * unspecified.
+ */
+bool encode_simple_escape(const char c, char * encoded)
+{
+    switch (c) {
+        case 'n':
+            *encoded = '\n';
+            return true;
+        case 'r':
+            *encoded = '\r';
+            return true;
+        case 't':
+            *encoded = '\t';
+            return true;
+        case '"':
+            *encoded = '"';
+            return true;
+        case '\\':
+            *encoded = '\\';
+            return true;
+        default:
+            return false;
+    }
+}
+
+/**
  * Recognize Unicode escapes in the form \u{NNNNN} and encode the
  * represented codepoints into UTF-8.
  * - returns: A string owned by the caller, with all non-escape
@@ -131,7 +161,18 @@ static char * render_escapes(const char * source)
     const char * next_escape = NULL;
     while ((next_escape = strchr(current_source, '\\'))) {
         const char * const escape_char = next_escape + 1;
-        const char * const brace_char = next_escape + 2;
+        char simple_encoded;
+        if (encode_simple_escape(*escape_char, &simple_encoded)) {
+            current_dest = append_contents(current_dest,
+                                           current_source,
+                                           next_escape);
+            memcpy(current_dest, &simple_encoded, 1);
+            current_dest += 1;
+            current_source = escape_char + 1;
+            continue;
+        }
+        
+        const char * const brace_char = escape_char + 1;
         const char * const digit_start = brace_char + 1;
         if ('u' != *escape_char || '{' != *brace_char || !isxdigit(*digit_start)) {
             current_dest = append_contents(current_dest,
@@ -145,7 +186,7 @@ static char * render_escapes(const char * source)
         const uint32_t codepoint = strtol(digit_start, &digit_end, 16);
         const size_t digit_count = digit_end - digit_start;
         // The highest codepoint is U+10FFFF, six hexadecimal digits,
-        // but we allow leading zeroes, to a total length of 8
+        // but we allow leading zeroes, to a max total length of 8
         if (*digit_end != '}' || digit_count < 1 || digit_count > 8) {
             // Invalid escape sequence; in real life we would signal an error
             current_dest = append_contents(current_dest,
