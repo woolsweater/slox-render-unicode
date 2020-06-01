@@ -8,7 +8,8 @@
 /**
  * Open the file at the given path and read its entire contents,
  * transferring ownership of the result to the caller.
- * - returns: `NULL` if the read fails for any reason.
+ *
+ * Returns `NULL` if the read fails for any reason.
  */
 static char * contents_of_file(const char * path)
 {
@@ -39,9 +40,10 @@ static char * contents_of_file(const char * path)
 /**
  * Copy the bytes between `src` and `end` into the buffer at `dest`,
  * then return `dest` advanced by the number of bytes copied.
- * - precondition: `end` must be an address after `src` in the same
+ *
+ * Precondition: `end` must be an address after `src` in the same
  * block of memory, and `dest` must be large enough to contain the
- * copied bytes.
+ * copied bytes. `dest` and the source allocation must not overlap.
  */
 static char * append_contents(char * dest, const char * src, const char * end)
 {
@@ -53,6 +55,13 @@ static char * append_contents(char * dest, const char * src, const char * end)
 /**
  * Encode the value as needed for the first byte of a UTF-8
  * sequence of the given length.
+ *
+ * The encoding takes only the low `8 - sequence_count - 1`
+ * bits from the input, then sets the top `sequence_count` bits.
+ * (The high bits indicate the length of the sequence; they are always
+ * followed by a single 0 bit; the lowest bits then contain the
+ * "payload".)
+ * A codepoint <= 255 is encoded directly as a single `uint8_t`.
  */
 static uint8_t utf8_leading_byte(uint8_t value, size_t sequence_count)
 {
@@ -71,12 +80,23 @@ static uint8_t utf8_leading_byte(uint8_t value, size_t sequence_count)
 /**
  * Encode the value as one of the bytes in position 2-4 of a UTF-8
  * sequence.
+ *
+ * The encoding takes the low 6 bits from the input,
+ * then sets the top bit and unsets the second from the top.
  */
 static uint8_t utf8_trailing_byte(uint32_t value)
 {
     return (value & 0x3f) | 0x80;
 }
 
+/**
+ * Transform the given value, which must be a valid Unicode codepoint,
+ * into its UTF-8 encoding.
+ *
+ * Returns the UTF-8 code units, packed into a `uint32_t` such that
+ * the leading byte is _physically_ the first byte (big-endian, in a sense);
+ * the length of the UTF-8 sequence is returned indirectly in `encoded_length`.
+ */
 static uint32_t codepoint_to_utf8(uint32_t codepoint, size_t *encoded_length)
 {
     uint32_t encoded = 0;
@@ -103,7 +123,9 @@ static uint32_t codepoint_to_utf8(uint32_t codepoint, size_t *encoded_length)
         abort();
     }
 
+    // Move leading code unit up to MSB
     encoded <<= (4 - *encoded_length) * 8;
+    // Ensure leading code unit is physically first for memcpy'ing
     return htonl(encoded);
 }
 
@@ -138,8 +160,10 @@ bool encode_simple_escape(const char c, char * encoded)
 
 /**
  * Recognize Unicode escapes in the form \u{NNNNN} and encode the
- * represented codepoints into UTF-8.
- * - returns: A string owned by the caller, with all non-escape
+ * represented codepoints into UTF-8. Also recognize and encode
+ * selected single-character escapes.
+ *
+ * Returns a string owned by the caller, with all non-escape
  * characters untouched.
  */
 static char * render_escapes(const char * source)

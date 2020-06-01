@@ -5,11 +5,16 @@
 # megabytes.
 INPUT_SIZE ?= 100000
 
-# Type of optimization to apply to the programs under test
+# Type of optimization to apply to the Swift programs under test
 # Supply one of the valid suffixes to swiftc's `-O` flag:
 # `none`, `unchecked`, `size`, or the empty string
 # Defaults to standard optimization, equivalent to the empty string
 OPTIMIZATION ?= ""
+
+# Type of optimization to apply to the C version
+# Supply one of the valid suffixes to clang's `-O` flag:
+# A digit 0-4, `fast`, `s`, `z`, `g`, or the empty string
+# Defaults to standard optimization, equivalent to the empty string
 C_OPTIMIZATION ?= ""
 
 optimization_flag := -O$(OPTIMIZATION)

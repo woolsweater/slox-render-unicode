@@ -1,5 +1,9 @@
 import Foundation
 
+/**
+ ASCII encoding values for various characters that we need
+ to be able to handle.
+ */
 enum ASCII {
     static let lowerN = Character("n").asciiValue!
     static let lowerR = Character("r").asciiValue!
@@ -16,6 +20,7 @@ enum ASCII {
 }
 
 extension BinaryInteger {
+
     /**
      The numerical value of the ASCII hexadecimal digit
      encoded by this number. `nil` if this number is not
@@ -41,6 +46,12 @@ extension BinaryInteger {
     }
 }
 
+//////
+//MARK:- Code here adapted from the Swift stdlib
+// https://github.com/apple/swift/blob/da61cc8cdf7aa2bfb3ab03200c52c4d371dc6751/stdlib/public/core/ValidUTF8Buffer.swift
+// See SWIFT_ORG_LICENSE.txt
+
+/** Wrapper for a four-byte sequence of UTF-8 code units. */
 struct UTF8Buffer {
     private let contents: UInt32
 }
@@ -97,6 +108,9 @@ extension UTF8Buffer : Sequence {
     }
 }
 
+//MARK:- End code adapted from Swift stdlib
+//////
+
 @inline(__always)
 func utf8LeadingByte(_ value: UInt32, sequenceCount: Int) -> UInt32 {
     switch sequenceCount {
@@ -118,6 +132,13 @@ func utf8TrailingByte(_ value: UInt32) -> UInt32 {
     (value & 0b11_1111) | 0b1000_0000
 }
 
+/**
+ Parse the sequence of characters, which must all be (ASCII)
+ hexadecimal digits, into its corresponding codepoint, then
+ encode that codepoint as UTF-8.
+ - returns: `nil` if any of the characters is not a hexadecimal
+ digit or if the resulting value is above 0x10FFFF.
+ */
 @inline(__always)
 func asciiHexToUTF8<C : Collection>(_ chars: C) -> UTF8Buffer?
     where C.Element : BinaryInteger
@@ -129,12 +150,21 @@ func asciiHexToUTF8<C : Collection>(_ chars: C) -> UTF8Buffer?
         codepoint += UInt32(value)
     }
 
+    guard codepoint <= 0x10ffff else { return nil }
+    
     return UTF8Buffer(codepoint)
 }
 
 extension UnsafePointer where Pointee == UInt8 {
+
+    /**
+     Find the length of this C string.
+     - warning: If this pointer is not a proper C string
+     (there is no terminating `NUL`), this has undefined
+     behavior.
+     */
     @inline(__always)
-    func indexOfNul() -> Int {
+    func cStringLength() -> Int {
         var pointer = self
         while pointer.pointee != 0x0 {
             pointer = pointer.successor()
@@ -143,6 +173,11 @@ extension UnsafePointer where Pointee == UInt8 {
     }
 }
 
+/**
+ If the byte represents one of our recognized escape
+ characters, return the UTF-8 encoding of the sequence;
+ otherwise return `nil`.
+ */
 func encodeSimpleEscape(_ char: UInt8) -> UInt8? {
     switch char {
         case ASCII.lowerN:
@@ -160,10 +195,15 @@ func encodeSimpleEscape(_ char: UInt8) -> UInt8? {
     }
 }
 
+/**
+ Working with the input string as UTF-8 data, use Swift pointer APIs to
+ recognize and process escape sequences into their corresponding UTF-8
+ encoding. The result is then re-wrapped into a Swift `String`.
+ */
 func renderEscapes(in s: String) -> String {
 
    let processed: [UInt8] = s.withCString(encodedAs: UTF8.self) { (base) in
-        let count = base.indexOfNul()
+        let count = base.cStringLength()
         guard count > 0 else { return [] }
         let buf = UnsafeBufferPointer(start: base, count: count)
 

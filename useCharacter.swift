@@ -17,6 +17,11 @@ func renderSimpleEscape(_ character: Character) -> Character? {
     }
 }
 
+/**
+ Use Swift's `Character`, `String`, and other high-level facilities to
+ process escape sequences into their corresponding Unicode scalar values,
+ then return the resulting `String`.
+ */
 func renderEscapes(in s: String) -> String {
 
     var rendered = ""
