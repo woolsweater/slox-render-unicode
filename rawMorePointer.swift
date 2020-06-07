@@ -60,7 +60,7 @@ extension UInt32 {
      trailing bytes follow and unused bytes are 0. The length of the UTF-8
      sequence (the number of used bytes) is returned alongside.
      */
-    func toUTF8() -> (UInt32, Int) {
+    func toUTF8() -> (UInt32, Int)? {
         var contents: UInt32 = 0
         let length: Int
         if self < 0x80 {
@@ -77,14 +77,16 @@ extension UInt32 {
                 utf8LeadingByte(self >> 12, sequenceCount: length) << 16 |
                 (utf8TrailingByte(self >> 6) << 8) |
                 utf8TrailingByte(self)
-        } else {
-            precondition(self <= 0x10ffff, "Invalid codepoint")
+        } else if self <= 0x10ffff  {
             length = 4
             contents =
                 utf8LeadingByte(self >> 18, sequenceCount: length) << 24 |
                 (utf8TrailingByte(self >> 12) << 16) |
                 (utf8TrailingByte(self >> 6) << 8) |
                 utf8TrailingByte(self)
+        } else {
+            // Invalid codepoint
+            return nil
         }
         
         // Slide code units so that the leading one is in the MSB
@@ -148,7 +150,6 @@ func parseHexEscape(_ start: UnsafePointer<UInt8>) -> (UInt32, end: UnsafePointe
     // The highest codepoint is U+10FFFF, six hexadecimal digits,
     // but we allow leading zeroes, to a max total length of 8
     guard 1...8 ~= start.distance(to: current) else { return nil }
-    guard codepoint <= 0x10ffff else { return nil }
     return (codepoint, current)
 }
 
@@ -284,7 +285,13 @@ func renderEscapes(in s: String) -> String {
                 continue
             }
 
-            let (encoded, encodedLength) = codepoint.toUTF8()
+            guard let (encoded, encodedLength) = codepoint.toUTF8() else {
+                // Invalid codepoint; in real life we would signal an error
+                currentDest.appendContents(of: currentSource, upTo: digitEnd)
+                currentSource = digitEnd
+                continue
+            }
+
             currentDest.appendContents(of: currentSource, upTo: nextEscape)
             _ = withUnsafePointer(to: encoded) {
                 memcpy(currentDest, UnsafeRawPointer($0), encodedLength)
@@ -306,6 +313,9 @@ func renderEscapes(in s: String) -> String {
 
 //MARK:- Script
 
-let source = try! String(contentsOfFile: "input.txt")
-let rendered = renderEscapes(in: source)
-print(rendered, terminator: "")
+if let source = try? String(contentsOfFile: "input.txt") {
+    let rendered = renderEscapes(in: source)
+    print(rendered, terminator: "")
+} else {
+    exit(1)    
+}

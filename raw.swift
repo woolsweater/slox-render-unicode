@@ -259,6 +259,9 @@ func renderEscapes(in s: String) -> String {
 
 //MARK:- Script
 
-let source = try! String(contentsOfFile: "input.txt")
-let rendered = renderEscapes(in: source)
-print(rendered, terminator: "")
+if let source = try? String(contentsOfFile: "input.txt") {
+    let rendered = renderEscapes(in: source)
+    print(rendered, terminator: "")
+} else {
+    exit(1)    
+}
